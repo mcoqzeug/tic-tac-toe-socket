@@ -1,0 +1,10 @@
+.DS_Store
+tictactoeServer
+tictactoeClient
+testSendTo
+CMakeLists.txt
+
+.vscode/
+.idea/
+cmake-build-debug/
+*.dSYM/
