@@ -27,7 +27,7 @@
 #define SERVER_MARK 'O'
 
 // 1st byte
-#define VERSION 7
+#define VERSION 8
 
 // 3rd byte
 #define GAME_ON 0
