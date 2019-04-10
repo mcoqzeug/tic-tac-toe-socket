@@ -1,4 +1,4 @@
-# Lab 7
+# Project
 
 Team members: Juanxi Li, Wei Da
 
