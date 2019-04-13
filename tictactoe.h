@@ -57,7 +57,6 @@
 // time
 #define TIME_LIMIT_CLIENT 10
 #define TIME_LIMIT_SERVER 10
-#define TIME_LIMIT_BOARD 30
 
 #define DELIM "."
 
@@ -84,9 +83,9 @@ int isIpValid(const char *ip_str);
 
 int isPortNumValid(const char *portNum);
 
-int sendChoice(
-        int connected,
-        uint8_t sb[BUFFER_SIZE]);
+int sendBuffer(
+        int connected_sd,
+        uint8_t buffer[BUFFER_SIZE]);
 
 int sendMoveWithChoice(
         int sd,
@@ -95,5 +94,10 @@ int sendMoveWithChoice(
         uint8_t sequenceNum,
         char board[ROWS][COLUMNS],
         char mark);
+
+void respondToInvalidRequest(
+        int sd,
+        int sendSequenceNum,
+        uint8_t gameId);
 
 #endif

@@ -15,4 +15,4 @@ tictactoeClient: tictactoeClient.c tictactoe.h tictactoe.c client.c
 	$(CC) $(CFLAGS) -o tictactoeClient tictactoeClient.c tictactoe.c client.c
 
 clean:
-	$(RM) tictactoeServer tictactoeClient testSendTo
+	$(RM) tictactoeServer tictactoeClient

@@ -92,8 +92,22 @@ int parseGeneralError(uint8_t statusModifier) {
     return 0;
 }
 
+
+void respondToInvalidRequest(
+        int sd,
+        int sendSequenceNum,
+        uint8_t gameId) {
+
+    uint8_t sb[BUFFER_SIZE] = {
+            VERSION, 0, GAME_ERROR, MALFORMED_REQUEST, MOVE, gameId,
+            (uint8_t) sendSequenceNum};
+
+    sendBuffer(sd, sb);
+}
+
+
 /*
- * Function: sendChoice
+ * Function: sendBuffer
  * ----------------------------
  *   send choice for each step in the game
  *
@@ -105,20 +119,15 @@ int parseGeneralError(uint8_t statusModifier) {
  *
  *   return: returns 1 if send succeed, else 0
  */
-int sendChoice(
-        int connected_sd,
-        uint8_t buffer[BUFFER_SIZE]) {
-
-
+int sendBuffer(int connected_sd, uint8_t buffer[BUFFER_SIZE]) {
     uint8_t nB[BUFFER_SIZE];
-
     nB[0] = buffer[0];
     nB[1] = buffer[1];
     nB[2] = buffer[2];
     nB[3] = buffer[3];
     nB[4] = buffer[4];
     nB[5] = buffer[5];
-    nB[6] = buffer[6];
+    nB[6] = buffer[6];  // todo: why?
 
     int writeResult = (int) write(connected_sd, &nB, sizeof(nB));
 
@@ -179,9 +188,7 @@ int sendMoveWithChoice(
             VERSION, choice, (uint8_t) status, (uint8_t) result, MOVE,
             gameId, sequenceNum};
 
-    if (sendChoice(sd, sb) == 0)
-        return GAME_ERROR;
-
+    if (sendBuffer(sd, sb) == 0) return GAME_ERROR;
     return GAME_ON;
 }
 
