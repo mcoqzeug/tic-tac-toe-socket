@@ -350,7 +350,7 @@ int multicast(int sd_dgram, struct in_addr multicast_address) {
 }
 
 
-void reconnnect(int sd, char board[ROWS][COLUMNS]) {
+void reconnnect(int connected_sd, char board[ROWS][COLUMNS]) {
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
@@ -371,10 +371,10 @@ void reconnnect(int sd, char board[ROWS][COLUMNS]) {
     }
 
     printf("reconnect\n");
-    sendBuffer(sd, bufferSend);
+    sendBuffer(connected_sd, bufferSend);
 
     // receive
-    int recvResult = recvBuffer(sd);
+    int recvResult = recvBuffer(connected_sd);
     if (recvResult == 0) {
         // todo multicast
         return;
@@ -382,15 +382,7 @@ void reconnnect(int sd, char board[ROWS][COLUMNS]) {
 
     // Server responds with the game number in addition to their move,
     // or with a reconnect error if they became full.
-    uint8_t game_status = bufferRecv[2];
-    uint8_t statusModifier = bufferRecv[3];
-    if (game_status == GAME_ERROR) {
-        parseGeneralError(statusModifier);
-        // todo multicast
-        return;
-    }
-
-
+    int recvMoveResult = receiveMoveClient(connected_sd, 0, board);
 }
 
 
@@ -404,7 +396,7 @@ void playClient(
     int buildGame = buildGameForClient(connected_sd, board);
     if (buildGame < 0) {
         // todo multicast
-
+        multicast(sd_dgram, (struct in_addr) multicast_address);
     }
 
     uint8_t gameId = (uint8_t) buildGame;
