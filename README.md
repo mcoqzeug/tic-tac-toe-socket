@@ -33,13 +33,4 @@ e.g. (locally)
 ```
 
 
-## Design
-
-Byte priority:
-1st byte, version;
-5th byte, game type / command;
-7th byte, sequence number;
-3rd byte, game status;
-...
-
 
