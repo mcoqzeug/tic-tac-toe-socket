@@ -51,18 +51,19 @@
 #define NEW_GAME 0
 #define MOVE 1
 #define END_GAME 2
+#define RECONNECT 3
 
 #define BUFFER_SIZE 1000
 
-// time
-#define TIME_LIMIT_CLIENT 10
 #define TIME_LIMIT_SERVER 10
 
 #define DELIM "."
 
 #define MAX_SEND_COUNT 3
 
-#define SKIP_NEXT_SEND 6
+// multicast
+#define MC_PORT 1818
+#define MC_GROUP "239.0.0.1"
 
 
 int parseGeneralError(uint8_t statusModifier);
@@ -75,9 +76,15 @@ void initBoard(char board[ROWS][COLUMNS]);
 
 void printBoard(char board[ROWS][COLUMNS], char mark);
 
-void playServer(int sd);
+void playServer(
+        int sd_stream,
+        int sd_dgram,
+        struct sockaddr_in multicast_address);
 
-void playClient(int sd);
+void playClient(
+        int connected_sd,
+        int sd_dgram,
+        struct sockaddr_in multicast_address);
 
 int isIpValid(const char *ip_str);
 
@@ -99,5 +106,9 @@ void respondToInvalidRequest(
         int sd,
         int sendSequenceNum,
         uint8_t gameId);
+
+void u16_to_u8(uint16_t port_s, uint8_t port_array[2]);
+
+uint16_t u8_to_u16(const uint8_t port_array[2]);
 
 #endif

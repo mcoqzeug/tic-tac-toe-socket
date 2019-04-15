@@ -13,36 +13,27 @@
  *   return: Returns GAME_ON (0), DRAW (1), WIN (2), or LOSE (3)
  */
 int checkWin(char board[ROWS][COLUMNS], char mark) {
-    if (board[0][0] == board[0][1] && board[0][1] == board[0][2]) {  // row matches
+    if (board[0][0] == board[0][1] && board[0][1] == board[0][2])  // row
         return (mark == board[0][0]) ? WIN : LOSE;
-    }
-    else if (board[1][0] == board[1][1] && board[1][1] == board[1][2]) {  // row matches
+    else if (board[1][0] == board[1][1] && board[1][1] == board[1][2])  // row
         return (mark == board[1][0]) ? WIN : LOSE;
-    }
-    else if (board[2][0] == board[2][1] && board[2][1] == board[2][2]) {  // row matches
+    else if (board[2][0] == board[2][1] && board[2][1] == board[2][2])  // row
         return (mark == board[2][0]) ? WIN : LOSE;
-    }
-    else if (board[0][0] == board[1][0] && board[1][0] == board[2][0]) {  // column
+    else if (board[0][0] == board[1][0] && board[1][0] == board[2][0])  // column
         return (mark == board[0][0]) ? WIN : LOSE;
-    }
-    else if (board[0][1] == board[1][1] && board[1][1] == board[2][1]) {  // column
+    else if (board[0][1] == board[1][1] && board[1][1] == board[2][1])  // column
         return (mark == board[0][1]) ? WIN : LOSE;
-    }
-    else if (board[0][2] == board[1][2] && board[1][2] == board[2][2]) {  // column
+    else if (board[0][2] == board[1][2] && board[1][2] == board[2][2])  // column
         return (mark == board[0][2]) ? WIN : LOSE;
-    }
-    else if (board[0][0] == board[1][1] && board[1][1] == board[2][2]) {  // diagonal
+    else if (board[0][0] == board[1][1] && board[1][1] == board[2][2])  // diagonal
         return (mark == board[0][0]) ? WIN : LOSE;
-    }
-    else if (board[2][0] == board[1][1] && board[1][1] == board[0][2]) {  // diagonal
+    else if (board[2][0] == board[1][1] && board[1][1] == board[0][2])  // diagonal
         return (mark == board[2][0]) ? WIN : LOSE;
-    }
     else if (board[0][0] != '1' && board[0][1] != '2' && board[0][2] != '3' &&
              board[1][0] != '4' && board[1][1] != '5' && board[1][2] != '6' &&
              board[2][0] != '7' && board[2][1] != '8' && board[2][2] != '9')
         return DRAW;
-    else
-        return GAME_ON;
+    else return GAME_ON;
 }
 
 
@@ -68,6 +59,7 @@ void printBoard(char board[ROWS][COLUMNS], char mark) {
     printf("  %c  |  %c  |  %c \n", board[2][0], board[2][1], board[2][2]);
     printf("     |     |     \n\n");
 }
+
 
 /*
  * return 1 if statusModifier == TRY_AGAIN else return 0
@@ -120,28 +112,17 @@ void respondToInvalidRequest(
  *   return: returns 1 if send succeed, else 0
  */
 int sendBuffer(int connected_sd, uint8_t buffer[BUFFER_SIZE]) {
-    uint8_t nB[BUFFER_SIZE];
-    nB[0] = buffer[0];
-    nB[1] = buffer[1];
-    nB[2] = buffer[2];
-    nB[3] = buffer[3];
-    nB[4] = buffer[4];
-    nB[5] = buffer[5];
-    nB[6] = buffer[6];  // todo: why?
-
-    int writeResult = (int) write(connected_sd, &nB, sizeof(nB));
-
+    int writeResult = (int) write(connected_sd, buffer, BUFFER_SIZE);
     if (writeResult < 0) {
         perror("Failed to send data");
         return 0;
     }
-
     printf("SEND choice: %d status: %d statusModifier: %d "
            "gameType: %d gameId: %d sequenceNum: %d\n",
            buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6]);
-
     return 1;
 }
+
 
 /*
  * Function: sendMoveWithChoice
@@ -150,17 +131,15 @@ int sendBuffer(int connected_sd, uint8_t buffer[BUFFER_SIZE]) {
  *
  *   sd: socket file descriptor
  *
- *   uint8_t choice,
- *   uint8_t gameId,
- *   uint8_t sequenceNum,
- *   uint8_t buffer[BUFFER_SIZE],  // used to store the buffer last sent
- *   time_t *last_time,
+ *   choice:
+ *
+ *   gameId:
+ *
+ *   sequenceNum:
  *
  *   board[ROWS][COLUMNS]: the board for the game
  *
  *   mark: the mark for the player, either 'X' or 'O'
- *
- *   opponent_address_pointer: the pointer pointing to a sockaddr structure containing the opponent's address
  *
  *   return: game status, either GAME_ON (0), or GAME_ERROR (2)
  */
@@ -191,6 +170,7 @@ int sendMoveWithChoice(
     if (sendBuffer(sd, sb) == 0) return GAME_ERROR;
     return GAME_ON;
 }
+
 
 /*
  * Function: isMoveValid
@@ -286,4 +266,25 @@ int isPortNumValid(const char *portNum) {
     for (int i = 1; i < strlen(portNum); i++)
         if (portNum[i] > '9' || portNum[i] < '0') return 0;
     return 1;
+}
+
+
+/*
+ * convert a network short type integer (2 bytes) to an array of uint8_t integers (1 byte)
+ * where 1st element represents the first 8 bits and 2nd element represents the last 8 bits.
+ * Both unsigned.
+ */
+void u16_to_u8(uint16_t port_s, uint8_t port_array[2]) {
+    port_array[0] = port_s >> 0;
+    port_array[1] = port_s >> 8;
+}
+
+
+/*
+ * reverse of u16_to_u8
+ */
+uint16_t u8_to_u16(const uint8_t port_array[2]) {
+    uint16_t port_s = port_array[1] << 8;
+    port_s = port_s ^ (uint16_t) port_array[0];
+    return port_s;
 }

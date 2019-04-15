@@ -6,7 +6,10 @@
 
 
 static uint8_t bufferRecv[BUFFER_SIZE];
-static uint8_t bufferSend[BUFFER_SIZE];
+// static uint8_t bufferSend[BUFFER_SIZE];
+
+
+int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]);
 
 
 /*
@@ -31,44 +34,20 @@ uint8_t clientMakeChoice(char board[ROWS][COLUMNS]) {
 }
 
 /*
- * return LOOP_CONTINUE or LOOP_BREAK
+ * return 1 if receive successfully; return 0 otherwise
  */
-int recvTimeLimit(int sd, int *resendCountPtr) {
-    fd_set select_fds;
-    struct timeval timeout;
-
-    FD_ZERO(&select_fds);
-    FD_SET(sd, &select_fds);
-
-    timeout.tv_sec = TIME_LIMIT_CLIENT;
-    timeout.tv_usec = 0;
-
-    int selectResult = select(sd+1, &select_fds, NULL, NULL, &timeout) == 0;
-
-    if (selectResult < 0) {
-        perror("Failed to select: ");
-        return LOOP_BREAK;
-    }
-
-    if (selectResult == 0) {  // time out, todo: resend?
-        printf("No message in the past %d seconds. Resend.\n", TIME_LIMIT_CLIENT);
-        sendBuffer(sd, bufferSend);
-        *resendCountPtr += 1;
-        return LOOP_CONTINUE;
-    }
-
+int recvBuffer(int sd) {
     memset(bufferRecv, 0, BUFFER_SIZE);
     int rc = read(sd, bufferRecv, BUFFER_SIZE);
-
     if (rc == 0) {
         printf("Server is disconnected.\n");
-        return LOOP_BREAK;
+        return 0;
     } else if (rc < BUFFER_SIZE) {
         printf("Received only %d bytes. (should have received %d bytes)\n", rc, BUFFER_SIZE);
         perror("Fail to read: ");
-        return LOOP_BREAK;
+        return 0;
     }
-    return LOOP_CONTINUE;
+    return 1;
 }
 
 
@@ -85,7 +64,10 @@ int receiveMoveClient(int connected_sd, int sendSequenceNum, char board[ROWS][CO
         return LOOP_BREAK;
     }
     if (recvStatus == GAME_ERROR) {
-        parseGeneralError(statusModifier);
+        if (parseGeneralError(statusModifier) == 1) {  // try again
+            buildGameForClient(connected_sd, board);
+            return LOOP_CONTINUE;
+        }
         return LOOP_BREAK;
     }
 
@@ -115,7 +97,7 @@ int receiveMoveClient(int connected_sd, int sendSequenceNum, char board[ROWS][CO
             uint8_t newChoice = clientMakeChoice(board);
             sendMoveWithChoice(
                     connected_sd, newChoice, gameId,
-                    (uint8_t) sendSequenceNum, board, SERVER_MARK);
+                    (uint8_t) sendSequenceNum, board, CLIENT_MARK);
             return LOOP_CONTINUE;
         }
         printf("Received invalid game status: %d, expected: %d.\n", recvStatus, GAME_ON);
@@ -165,7 +147,7 @@ int receiveMoveClient(int connected_sd, int sendSequenceNum, char board[ROWS][CO
  */
 int processBufferClient(
         int connected_sd,
-        int *resendCountPtr,
+        // int *resendCountPtr,
         uint8_t gameId,
         uint8_t *sequenceNumPtr,
         char board[ROWS][COLUMNS]) {
@@ -206,12 +188,12 @@ int processBufferClient(
         // receiving a duplicate packet means that the other
         // side might not have received my last msg, so do a resend
         // and skip the next move input
-        if (*resendCountPtr < MAX_TRY) {
-            printf("Received a duplicate packet, resend last msg.\n");
-            *resendCountPtr += 1;
-            sendBuffer(connected_sd, bufferSend);
-            return LOOP_CONTINUE;
-        }
+//        if (*resendCountPtr < MAX_TRY) {
+//            printf("Received a duplicate packet, resend last msg.\n");
+//            *resendCountPtr += 1;
+//            sendBuffer(connected_sd, bufferSend);
+//            return LOOP_CONTINUE;
+//        }
         printf("Received a duplicate packet, run out of resend chances, exit game.\n");
         return LOOP_BREAK;
     }
@@ -245,36 +227,51 @@ int processBufferClient(
 /*
  * return -1 if there's an error, otherwise return gameId (should be a non-negative integer)
  */
-int buildGameForClient(int connected_sd) {
-    int resendCount = 0;  // todo: this is useless
+int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
     for (int i=0; i<MAX_TRY+1; i++) {
         // send new game request
         uint8_t sb[BUFFER_SIZE] = {VERSION, 0, GAME_ON, 0, NEW_GAME, 0, 0};
         sendBuffer(connected_sd, sb);
 
         // receive response
-        memset(bufferRecv, 0, sizeof bufferRecv);
-        int recvResult = recvTimeLimit(connected_sd, &resendCount);
-        if (recvResult != MALFORMED_REQUEST && recvResult != TIME_OUT) {
-            // todo: need to check sequence number
+        int recvResult = recvBuffer(connected_sd);
+
+        printf("RECEIVE choice: %d status: %d statusModifier: %d "
+               "gameType: %d gameId: %d sequenceNum: %d\n",
+               bufferRecv[1], bufferRecv[2], bufferRecv[3],
+               bufferRecv[4], bufferRecv[5], bufferRecv[6]);
+
+        if (recvResult == 1) {
             uint8_t recvSequenceNum = bufferRecv[6];
 
             // check sequence number
             if (recvSequenceNum < 1) {
-                // receiving a duplicate packet means that the other
-                // side might not have received my last msg, so do a resend
-                printf("Received a duplicate packet, resend new game command.\n");
-                continue;
+                // receiving a duplicate packet
+                printf("Received a duplicate packet.\n");
+                return -1;
             }
             if (recvSequenceNum > 1) {
                 printf("Packets arrived out of order. Received sequence number: %d"
                        ", expected: %d.\n", recvSequenceNum, 1);
-                continue;
+                return -1;
             }
             uint8_t recvStatus = bufferRecv[2];
             uint8_t statusModifier = bufferRecv[3];
-            if (recvStatus == GAME_ERROR) parseGeneralError(statusModifier);
-            else return bufferRecv[5];
+            if (recvStatus == GAME_ERROR) {
+                parseGeneralError(statusModifier);
+                continue;
+            }
+            // client send 1st move
+            printBoard(board, CLIENT_MARK);
+            uint8_t choice = clientMakeChoice(board);
+            int sendMoveResult = sendMoveWithChoice(
+                    connected_sd,
+                    choice,
+                    bufferRecv[5],
+                    2,
+                    board,
+                    CLIENT_MARK);
+            if (sendMoveResult == GAME_ON) return bufferRecv[5];
         }
         printf("Retry new game request.\n");
     }
@@ -283,33 +280,144 @@ int buildGameForClient(int connected_sd) {
 }
 
 
-void playClient(int connected_sd) {
+/*
+ * sd_dgram:
+ *
+ * multicast_address: address of the multicast group
+ *
+ * return the sd_stream of a newly connected stream socket
+ */
+int multicast(int sd_dgram, struct in_addr multicast_address) {
+    // send
+    uint8_t bufferSend[BUFFER_SIZE];
+    bufferSend[0] = VERSION;
+    bufferSend[1] = 1;
+
+    int cnt = sendto(sd_dgram, bufferSend, sizeof(bufferSend), 0,
+            (struct sockaddr *) &multicast_address, sizeof(multicast_address));
+    if (cnt < 0) {
+        perror("sendto");
+        close(sd_dgram);
+        // todo retry?
+    }
+
+    // receive
+    socklen_t addrLen;
+    struct in_addr addr;
+    cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
+    if (cnt < BUFFER_SIZE) {
+        printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+        perror("Fail to read: ");
+        // todo retry?
+    }
+
+    // check version
+    if (bufferRecv[0] != VERSION) {
+        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
+        // todo retry?
+    }
+
+    // check command
+    if (bufferRecv[1] != 2) {
+        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 2);
+        // todo retry?
+    }
+
+    // get port number
+    uint8_t port_array[2] = {bufferRecv[2], bufferRecv[3]};
+    uint16_t serverPortNumber = u8_to_u16(port_array);
+
+    // connect
+    // start stream socket
+    int sd_stream = socket(AF_INET, SOCK_STREAM, 0);
+    if(sd_stream < 0) {
+        perror("Opening stream socket error");
+        exit(1);
+    }
+
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(serverPortNumber);
+    server_address.sin_addr.s_addr = addr.s_addr;
+
+    if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
+        close(sd_stream);
+        perror("connect error");
+        // todo retry?
+    }
+
+    return sd_stream;
+}
+
+
+void reconnnect(int sd, char board[ROWS][COLUMNS]) {
+    // send
+    uint8_t bufferSend[BUFFER_SIZE];
+    bufferSend[0] = VERSION;
+    bufferSend[4] = RECONNECT;
+
+    int boardIdx = 7;
+
+    for (int i=0; i<ROWS; i++) {
+        for (int j=0; j<COLUMNS; j++) {
+            if (board[i][j] == SERVER_MARK)
+                bufferSend[boardIdx] = 2;
+            else if (board[i][j] == CLIENT_MARK)
+                bufferSend[boardIdx] = 1;
+            else
+                bufferSend[boardIdx] = 0;
+            boardIdx++;
+        }
+    }
+
+    printf("reconnect\n");
+    sendBuffer(sd, bufferSend);
+
+    // receive
+    int recvResult = recvBuffer(sd);
+    if (recvResult == 0) {
+        // todo multicast
+        return;
+    }
+
+    // Server responds with the game number in addition to their move,
+    // or with a reconnect error if they became full.
+    uint8_t game_status = bufferRecv[2];
+    uint8_t statusModifier = bufferRecv[3];
+    if (game_status == GAME_ERROR) {
+        parseGeneralError(statusModifier);
+        // todo multicast
+        return;
+    }
+
+
+}
+
+
+void playClient(
+        int connected_sd,
+        int sd_dgram,
+        struct sockaddr_in multicast_address) {
     char board[ROWS][COLUMNS];
     initBoard(board);
 
-    int buildGame = buildGameForClient(connected_sd);
-    if (buildGame < 0) return;
+    int buildGame = buildGameForClient(connected_sd, board);
+    if (buildGame < 0) {
+        // todo multicast
 
-    printBoard(board, CLIENT_MARK);
+    }
+
     uint8_t gameId = (uint8_t) buildGame;
     uint8_t sequenceNum = 2;
-    int resendCount = 0;
-
-    // client send the 1st move
-    uint8_t choice = clientMakeChoice(board);
-    int sendMoveResult = sendMoveWithChoice(
-            connected_sd,
-            choice,
-            gameId,
-            sequenceNum,
-            board,
-            CLIENT_MARK);
-    if (sendMoveResult == GAME_ERROR) return;
+    //int resendCount = 0;
 
     for (;;) {
-        int recvResult = recvTimeLimit(connected_sd, &resendCount);
-        if (recvResult == LOOP_BREAK) break;
-        int processResult = processBufferClient(connected_sd, &resendCount, gameId, &sequenceNum, board);
+        int recvResult = recvBuffer(connected_sd);
+        if (recvResult == 0) {
+            // todo multicast
+            continue;
+        }
+        int processResult = processBufferClient(connected_sd, gameId, &sequenceNum, board);
         if (processResult == LOOP_BREAK) break;
     }
 }

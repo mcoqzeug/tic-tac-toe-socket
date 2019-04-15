@@ -289,9 +289,17 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
  * ----------------------------
  *   Simulate the game play process for server
  *
- *   sd: socket file descriptor of the server
+ *   sd_stream: socket file descriptor of the server
+ *
+ *   sd_dgram:
+ *
+ *   multicast_address:
  */
-void playServer(int sd) {
+void playServer(
+        int sd_stream,
+        int sd_dgram,
+        struct sockaddr_in multicast_address) {
+
     char boards[MAX_BOARD][ROWS][COLUMNS];
 
     // initialize boardInfo and boards
@@ -306,11 +314,11 @@ void playServer(int sd) {
         checkBoardTimeOut(boards);
 
         fd_set socketFDS;
-        int maxSD = sd;
+        int maxSD = sd_stream;
         struct timeval timeout;
 
         FD_ZERO(&socketFDS);
-        FD_SET(sd, &socketFDS);
+        FD_SET(sd_stream, &socketFDS);
 
         // update socketFDS
         for (int i=0; i<MAX_BOARD; i++) {
@@ -335,11 +343,11 @@ void playServer(int sd) {
             continue;
         }
         // establish new connection
-        if (FD_ISSET(sd, &socketFDS)) {  // todo why?
+        if (FD_ISSET(sd_stream, &socketFDS)) {  // todo why?
             uint8_t gameId;
             struct sockaddr_in from_address;
             socklen_t fromLength;
-            int connected_sd = accept(sd, (struct sockaddr *) &from_address, &fromLength);
+            int connected_sd = accept(sd_stream, (struct sockaddr *) &from_address, &fromLength);
             if (connected_sd < 0) perror("");
 
             for (gameId=0; gameId<MAX_BOARD; gameId++) {
@@ -356,10 +364,9 @@ void playServer(int sd) {
                 close(connected_sd);
             }
         }
-
         // receive buffer from all connected clients
         for (int i=0; i<MAX_BOARD; i++) {
-            if (FD_ISSET(boardInfo[i].sd, &socketFDS)) {  // todo why not: if(boardInfo[gameId].sd != 0)
+            if (FD_ISSET(boardInfo[i].sd, &socketFDS)) {  // todo why not: if(boardInfo[gameId].sd_stream != 0)
                 uint8_t buffer[BUFFER_SIZE];
                 int rc = read(boardInfo[i].sd, &buffer, sizeof(buffer));
                 if (rc == 0) { // the client disconnected normally
