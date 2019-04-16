@@ -64,10 +64,7 @@ int receiveMoveClient(int connected_sd, int sendSequenceNum, char board[ROWS][CO
         return LOOP_BREAK;
     }
     if (recvStatus == GAME_ERROR) {
-        if (parseGeneralError(statusModifier) == 1) {  // try again
-            buildGameForClient(connected_sd, board);
-            return LOOP_CONTINUE;
-        }
+        parseGeneralError(statusModifier);
         return LOOP_BREAK;
     }
 
@@ -203,7 +200,7 @@ int processBufferClient(
         respondToInvalidRequest(connected_sd, sendSequenceNum, gameId);
         return LOOP_BREAK;
     }
-    // when gameId, port & ip, seqNum are all correct,
+    // when gameId, seqNum are all correct,
     // gameType can be END_GAME or MOVE
     // update sequenceNumPtr
     *sequenceNumPtr = (uint8_t) sendSequenceNum;
@@ -228,39 +225,37 @@ int processBufferClient(
  * return -1 if there's an error, otherwise return gameId (should be a non-negative integer)
  */
 int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
-    for (int i=0; i<MAX_TRY+1; i++) {
-        // send new game request
-        uint8_t sb[BUFFER_SIZE] = {VERSION, 0, GAME_ON, 0, NEW_GAME, 0, 0};
-        sendBuffer(connected_sd, sb);
+    // send new game request
+    uint8_t sb[BUFFER_SIZE] = {VERSION, 0, GAME_ON, 0, NEW_GAME, 0, 0};
+    sendBuffer(connected_sd, sb);
 
-        // receive response
-        int recvResult = recvBuffer(connected_sd);
+    // receive response
+    int recvResult = recvBuffer(connected_sd);
 
-        printf("RECEIVE choice: %d status: %d statusModifier: %d "
-               "gameType: %d gameId: %d sequenceNum: %d\n",
-               bufferRecv[1], bufferRecv[2], bufferRecv[3],
-               bufferRecv[4], bufferRecv[5], bufferRecv[6]);
+    printf("RECEIVE choice: %d status: %d statusModifier: %d "
+           "gameType: %d gameId: %d sequenceNum: %d\n",
+           bufferRecv[1], bufferRecv[2], bufferRecv[3],
+           bufferRecv[4], bufferRecv[5], bufferRecv[6]);
 
-        if (recvResult == 1) {
-            uint8_t recvSequenceNum = bufferRecv[6];
+    if (recvResult == 1) {
+        uint8_t recvSequenceNum = bufferRecv[6];
 
-            // check sequence number
-            if (recvSequenceNum < 1) {
-                // receiving a duplicate packet
-                printf("Received a duplicate packet.\n");
-                return -1;
-            }
-            if (recvSequenceNum > 1) {
-                printf("Packets arrived out of order. Received sequence number: %d"
-                       ", expected: %d.\n", recvSequenceNum, 1);
-                return -1;
-            }
-            uint8_t recvStatus = bufferRecv[2];
-            uint8_t statusModifier = bufferRecv[3];
-            if (recvStatus == GAME_ERROR) {
-                parseGeneralError(statusModifier);
-                continue;
-            }
+        // check sequence number
+        if (recvSequenceNum < 1) {
+            // receiving a duplicate packet
+            printf("Received a duplicate packet.\n");
+            return -1;
+        }
+        if (recvSequenceNum > 1) {
+            printf("Packets arrived out of order. Received sequence number: %d"
+                   ", expected: %d.\n", recvSequenceNum, 1);
+            return -1;
+        }
+        uint8_t recvStatus = bufferRecv[2];
+        uint8_t statusModifier = bufferRecv[3];
+        if (recvStatus == GAME_ERROR) {
+            parseGeneralError(statusModifier);
+        } else {
             // client send 1st move
             printBoard(board, CLIENT_MARK);
             uint8_t choice = clientMakeChoice(board);
@@ -273,7 +268,6 @@ int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
                     CLIENT_MARK);
             if (sendMoveResult == GAME_ON) return bufferRecv[5];
         }
-        printf("Retry new game request.\n");
     }
     printf("Cannot build Game with server.\n");
     return -1;
@@ -287,14 +281,14 @@ int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
  *
  * return the sd_stream of a newly connected stream socket
  */
-int multicast(int sd_dgram, struct in_addr multicast_address) {
+int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
     bufferSend[1] = 1;
 
     int cnt = sendto(sd_dgram, bufferSend, sizeof(bufferSend), 0,
-            (struct sockaddr *) &multicast_address, sizeof(multicast_address));
+            (struct sockaddr *) multicast_address, sizeof(multicast_address));
     if (cnt < 0) {
         perror("sendto");
         close(sd_dgram);
@@ -350,7 +344,7 @@ int multicast(int sd_dgram, struct in_addr multicast_address) {
 }
 
 
-void reconnnect(int connected_sd, char board[ROWS][COLUMNS]) {
+void reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
@@ -377,12 +371,19 @@ void reconnnect(int connected_sd, char board[ROWS][COLUMNS]) {
     int recvResult = recvBuffer(connected_sd);
     if (recvResult == 0) {
         // todo multicast
+        close(connected_sd);
         return;
     }
+
+    // todo update sequence number
 
     // Server responds with the game number in addition to their move,
     // or with a reconnect error if they became full.
     int recvMoveResult = receiveMoveClient(connected_sd, 0, board);
+    if (recvMoveResult == LOOP_BREAK) {
+        close(connected_sd);
+        exit(1);
+    }
 }
 
 
@@ -396,7 +397,8 @@ void playClient(
     int buildGame = buildGameForClient(connected_sd, board);
     if (buildGame < 0) {
         // todo multicast
-        multicast(sd_dgram, (struct in_addr) multicast_address);
+        int sd_stream = multicast(sd_dgram, &multicast_address);
+        reconnect(sd_stream, board);
     }
 
     uint8_t gameId = (uint8_t) buildGame;
@@ -407,6 +409,9 @@ void playClient(
         int recvResult = recvBuffer(connected_sd);
         if (recvResult == 0) {
             // todo multicast
+            close(connected_sd);
+            int sd_stream = multicast(sd_dgram, &multicast_address);
+            reconnect(sd_stream, board);
             continue;
         }
         int processResult = processBufferClient(connected_sd, gameId, &sequenceNum, board);

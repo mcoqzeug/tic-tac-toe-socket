@@ -230,7 +230,7 @@ void processBuffer(
         time(&boardInfo[gameId].latest_time);
         return;
     }
-    // when gameId, port & ip, seqNum are all correct,
+    // when gameId, seqNum are all correct,
     // gameType can be END_GAME or MOVE
     // update next expected received sequence number
     boardInfo[gameId].sequenceNum = (uint8_t) nextRecvSequenceNum;
