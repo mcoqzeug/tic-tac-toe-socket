@@ -71,6 +71,10 @@ void receiveNewGame(
     sendBuffer(boardInfo[gameId].sd, sb);
 }
 
+void receiveReconnect() {
+
+}
+
 
 void receiveMove(
         int sendSequenceNum,
@@ -284,6 +288,10 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
 }
 
 
+void processMulticast (int sd_dgram) {
+
+}
+
 /*
  * Function: playServer
  * ----------------------------
@@ -319,6 +327,9 @@ void playServer(
 
         FD_ZERO(&socketFDS);
         FD_SET(sd_stream, &socketFDS);
+        FD_SET(sd_dgram, &socketFDS);
+
+        maxSD = (sd_dgram > maxSD) ? sd_dgram : maxSD;
 
         // update socketFDS
         for (int i=0; i<MAX_BOARD; i++) {
@@ -332,7 +343,7 @@ void playServer(
         timeout.tv_usec = 0;
 
         // block until something arrives
-        int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);
+        int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);      
 
         if (selectResult < 0) {
             perror("Failed to select: ");
@@ -342,6 +353,11 @@ void playServer(
             printf("No message in the past %d seconds.\n", TIME_LIMIT_SERVER);
             continue;
         }
+
+        if (FD_ISSET(sd_dgram, &socketFDS)) {
+            processMulticast(sd_dgram);
+        }
+        
         // establish new connection
         if (FD_ISSET(sd_stream, &socketFDS)) {  // todo why?
             uint8_t gameId;

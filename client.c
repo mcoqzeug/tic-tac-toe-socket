@@ -337,14 +337,13 @@ int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
         close(sd_stream);
         perror("connect error");
-        // todo retry?
     }
 
     return sd_stream;
 }
 
 
-void reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
+int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
@@ -370,9 +369,8 @@ void reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     // receive
     int recvResult = recvBuffer(connected_sd);
     if (recvResult == 0) {
-        // todo multicast
         close(connected_sd);
-        return;
+        return 0;
     }
 
     // todo update sequence number
@@ -382,8 +380,10 @@ void reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     int recvMoveResult = receiveMoveClient(connected_sd, 0, board);
     if (recvMoveResult == LOOP_BREAK) {
         close(connected_sd);
-        exit(1);
+        return 0;
     }
+
+    return 1;
 }
 
 
@@ -397,8 +397,6 @@ void playClient(
     int buildGame = buildGameForClient(connected_sd, board);
     if (buildGame < 0) {
         // todo multicast
-        int sd_stream = multicast(sd_dgram, &multicast_address);
-        reconnect(sd_stream, board);
     }
 
     uint8_t gameId = (uint8_t) buildGame;
