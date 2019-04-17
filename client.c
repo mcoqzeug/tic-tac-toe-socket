@@ -4,9 +4,15 @@
 #define LOOP_CONTINUE 1
 #define LOOP_BREAK 0
 
+#define FILE_ROWS 10
+#define FILE_LINE_LENGTH 100
+
 
 static uint8_t bufferRecv[BUFFER_SIZE];
 // static uint8_t bufferSend[BUFFER_SIZE];
+
+char ipAddresses[FILE_ROWS][FILE_LINE_LENGTH];
+uint16_t portNumbers[FILE_ROWS];
 
 
 int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]);
@@ -279,7 +285,7 @@ int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
  *
  * multicast_address: address of the multicast group
  *
- * return the sd_stream of a newly connected stream socket, return -1 if failed
+ * return -1 if failed, otherwise return the sd_stream of a newly connected stream socket (should be non-negative)
  */
 int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     // send
@@ -292,7 +298,7 @@ int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     if (cnt < 0) {
         perror("sendto");
         close(sd_dgram);
-        // todo retry?
+        return -1;
     }
 
     // receive
@@ -311,35 +317,33 @@ int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
 
     if (selectResult < 0) {
         perror("Failed to select: ");
-        // todo
         return -1;
     }
     if (selectResult == 0) {
         printf("No message in the past %d seconds.\n", TIME_LIMIT_SERVER);
-        // todo
         return -1;
     }
 
     if (FD_ISSET(sd_dgram, &socketFDS)) {
-        socklen_t addrLen;
         struct in_addr addr;
+        socklen_t addrLen = sizeof(addr);
         cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
         if (cnt < BUFFER_SIZE) {
             printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
             perror("Fail to read: ");
-            // todo retry?
+            return -1;
         }
 
         // check version
         if (bufferRecv[0] != VERSION) {
             printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
-            // todo retry?
+            return -1;
         }
 
         // check command
         if (bufferRecv[1] != 2) {
             printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 2);
-            // todo retry?
+            return -1;
         }
 
         // get port number
@@ -369,6 +373,9 @@ int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
 }
 
 
+/*
+ * return gameId if success, otherwise return -1
+ */
 int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     // send
     uint8_t bufferSend[BUFFER_SIZE];
@@ -399,8 +406,6 @@ int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
         return 0;
     }
 
-    // todo update sequence number
-
     // Server responds with the game number in addition to their move,
     // or with a reconnect error if they became full.
     int recvMoveResult = receiveMoveClient(connected_sd, 0, board);
@@ -408,7 +413,37 @@ int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
         close(connected_sd);
         return 0;
     }
-    return 1;
+    return bufferRecv[5];
+}
+
+
+/*
+ * return sd_stream if succeed, otherwise return -1
+ */
+int connectToServer() {
+    for (int i=0; i<FILE_ROWS; i++) {
+        int sd_stream = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in server_address;
+
+        if(sd_stream < 0) {
+            perror("Opening stream socket error");
+            continue;
+        }
+
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = portNumbers[i];
+        server_address.sin_addr.s_addr = inet_addr(ipAddresses[i]);
+
+        if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
+            close(sd_stream);
+            perror("connect error");
+            continue;
+        }
+
+        return sd_stream;
+    }
+
+    return -1;
 }
 
 
@@ -416,12 +451,59 @@ void playClient(
         int connected_sd,
         int sd_dgram,
         struct sockaddr_in multicast_address) {
+
+    FILE * fp;
+    char *line = NULL;
+    size_t len = 0;
+
+    fp = fopen("ip_addresses", "r");
+    if (fp == NULL)
+        exit(EXIT_FAILURE);
+
+    int i = 0;
+    while (getline(&line, &len, fp) != -1) {
+        if (i >= FILE_ROWS) {
+            printf("WARNING: Input file too long.\n");
+            break;
+        }
+
+        strcpy(ipAddresses[i], line);
+
+        char portStr[FILE_LINE_LENGTH];
+        int k = 0;
+
+        int ipLength = FILE_LINE_LENGTH;
+        for (int j=0; j<FILE_LINE_LENGTH; j++) {
+            if (ipAddresses[i][j] == ' ') {
+                ipLength = j;
+                continue;
+            }
+
+            if (j > ipLength) {  // port number
+                portStr[k] = ipAddresses[i][j];
+                k++;
+            }
+        }
+
+        portNumbers[i] = htons(strtol(portStr, NULL, 10));
+
+        ipAddresses[i][ipLength] = 0;
+
+        i++;
+    }
+
+    fclose(fp);
+
     char board[ROWS][COLUMNS];
     initBoard(board);
 
     int buildGame = buildGameForClient(connected_sd, board);
     if (buildGame < 0) {
-        // todo multicast
+        int sd_stream = multicast(sd_dgram, &multicast_address);
+        if (sd_stream < 0) {
+            connectToServer();
+        }
+        reconnect(sd_stream, board);
     }
 
     uint8_t gameId = (uint8_t) buildGame;
@@ -431,10 +513,14 @@ void playClient(
     for (;;) {
         int recvResult = recvBuffer(connected_sd);
         if (recvResult == 0) {
-            // todo multicast
             close(connected_sd);
             int sd_stream = multicast(sd_dgram, &multicast_address);
+            if (sd_stream < 0) {
+                connectToServer();
+            }
+
             reconnect(sd_stream, board);
+            sequenceNum = 2;
             continue;
         }
         int processResult = processBufferClient(connected_sd, gameId, &sequenceNum, board);

@@ -72,10 +72,8 @@ int main(int argc, char* argv[]) {
     bzero((char *)&multicast_address, sizeof(multicast_address));
 
     multicast_address.sin_family = AF_INET;
-    multicast_address.sin_addr.s_addr = htonl(INADDR_ANY);
+    multicast_address.sin_addr.s_addr = htonl(INADDR_ANY);  // todo remove?
     multicast_address.sin_port = htons(MC_PORT);
-
-    // send
     multicast_address.sin_addr.s_addr = inet_addr(MC_GROUP);
 
     playClient(sd_stream, sd_dgram, multicast_address);
