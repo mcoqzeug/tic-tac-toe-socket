@@ -343,47 +343,49 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
 }
 
 
-void processMulticast (int sd_dgram, long portnumber) {
-
+void processMulticast(int sd_dgram, long portNumber) {
     uint8_t bufferSend[BUFFER_SIZE];
     uint8_t bufferRecv[BUFFER_SIZE];
 
     bufferSend[0] = VERSION;
     bufferSend[1] = 2;
 
-    struct in_addr addr;
-    socklen_t addrLen = sizeof(&addr);
+    struct sockaddr_in addr;
+    socklen_t addrLen = sizeof(addr);
 
     int cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
 
     if (cnt < BUFFER_SIZE) {
-            printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
-            perror("Fail to read: ");
+        printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+        perror("Fail to read: ");
     }
 
         // check version
     if (bufferRecv[0] != VERSION) {
-            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
+        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
     }
 
         // check command
     if (bufferRecv[1] != 1) {
-            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 1);
+        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 1);
     }
 
     uint8_t port_array[2];
-    u16_to_u8(htons(portnumber), port_array);
+    u16_to_u8(htons(portNumber), port_array);
     bufferSend[2] = port_array[0];
     bufferSend[3] = port_array[1];
 
     cnt = sendto(sd_dgram, bufferSend, sizeof(bufferSend), 0, (struct sockaddr *) &addr, sizeof(addr));
 
+    printf("SEND choice: %d status: %d statusModifier: %d "
+           "gameType: %d gameId: %d sequenceNum: %d\n",
+           bufferSend[1], bufferSend[2], bufferSend[3], bufferSend[4], bufferSend[5], bufferSend[6]);
+
     if (cnt < 0) {
-        perror("sendto");
+        perror("sendto in processMulticast");
         close(sd_dgram);
         // todo retry?
     }
-    return;
 }
 
 /*
@@ -400,7 +402,7 @@ void processMulticast (int sd_dgram, long portnumber) {
 void playServer(
         int sd_stream,
         int sd_dgram,
-        long portnumber) {
+        long portNumber) {
 
     char boards[MAX_BOARD][ROWS][COLUMNS];
 
@@ -423,7 +425,8 @@ void playServer(
         FD_SET(sd_stream, &socketFDS);
         FD_SET(sd_dgram, &socketFDS);
 
-        maxSD = (sd_dgram > maxSD) ? sd_dgram : maxSD;
+        if (sd_dgram> maxSD)
+            maxSD = sd_dgram;
 
         // update socketFDS
         for (int i=0; i<MAX_BOARD; i++) {
@@ -436,12 +439,15 @@ void playServer(
         timeout.tv_sec = TIME_LIMIT_SERVER;
         timeout.tv_usec = 0;
 
+        //printf("maxSD: %d, sd_dgram: %d, sd_stream: %d\n", maxSD, sd_dgram, sd_stream);
+
         // block until something arrives
         int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);
 
         if (selectResult < 0) {
             perror("Failed to select: ");
-            continue;
+            //continue; todo
+            break;
         }
         if (selectResult == 0) {
             printf("No message in the past %d seconds.\n", TIME_LIMIT_SERVER);
@@ -449,7 +455,11 @@ void playServer(
         }
 
         if (FD_ISSET(sd_dgram, &socketFDS)) {
-            processMulticast(sd_dgram, portnumber);
+            for (int i = 0; i < MAX_BOARD; i++) {
+                if (boardInfo[i].sd == 0) {
+                    processMulticast(sd_dgram, portNumber);
+                }
+            }
         }
         
         // establish new connection
