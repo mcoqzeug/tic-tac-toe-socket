@@ -79,5 +79,6 @@ int main(int argc, char* argv[]) {
     playClient(sd_stream, sd_dgram, multicast_address);
 
     close(sd_stream);
+    close(sd_dgram);
     return 0;
 }

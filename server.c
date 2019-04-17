@@ -241,7 +241,7 @@ void processBuffer(
     }
     // #receivedBytes and #version are correct and no timeout
     const uint8_t gameType = buffer[4];
-    if (gameType < 0 || gameType > 2) {
+    if (gameType < 0 || gameType > 3) {
         printf("Received invalid game type: %d.\n", gameType);
         respondToInvalidRequest(boardInfo[gameId].sd, sendSequenceNum, gameId);
         time(&boardInfo[gameId].latest_time);
@@ -375,6 +375,7 @@ void processMulticast(int sd_dgram, long portNumber) {
     }
 
     uint8_t port_array[2];
+    printf("port number long: %ld\n", portNumber);
     u16_to_u8(htons(portNumber), port_array);
     bufferSend[2] = port_array[0];
     bufferSend[3] = port_array[1];

@@ -288,6 +288,7 @@ int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
  * return -1 if failed, otherwise return the sd_stream of a newly connected stream socket (should be non-negative)
  */
 int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
+    printf("MULTICASTING\n");
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
@@ -300,6 +301,11 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
         close(sd_dgram);
         return -1;
     }
+
+    printf("SEND multicast: %d status: %d statusModifier: %d "
+           "gameType: %d gameId: %d sequenceNum: %d\n",
+           bufferSend[1], bufferSend[2], bufferSend[3],
+           bufferSend[4], bufferSend[5], bufferSend[6]);
 
     // receive
     fd_set socketFDS;
@@ -325,7 +331,7 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
     }
 
     if (FD_ISSET(sd_dgram, &socketFDS)) {
-        struct in_addr addr;
+        struct sockaddr_in addr;
         socklen_t addrLen = sizeof(addr);
         cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
         if (cnt < BUFFER_SIZE) {
@@ -334,19 +340,20 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
             return -1;
         }
 
-        printf("RECEIVE choice: %d status: %d statusModifier: %d "
+        printf("RECEIVE multicast: %d status: %d statusModifier: %d "
                "gameType: %d gameId: %d sequenceNum: %d\n",
-               bufferRecv[1], bufferRecv[2], bufferRecv[3], bufferRecv[4], bufferRecv[5], bufferRecv[6]);
+               bufferRecv[1], bufferRecv[2], bufferRecv[3],
+               bufferRecv[4], bufferRecv[5], bufferRecv[6]);
 
         // check version
         if (bufferRecv[0] != VERSION) {
-            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
+            printf("Received invalid multicast version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
             return -1;
         }
 
         // check command
         if (bufferRecv[1] != 2) {
-            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 2);
+            printf("Received invalid multicast command: %d, expected: %d.\n", bufferRecv[1], 2);
             return -1;
         }
 
@@ -364,8 +371,8 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
 
         struct sockaddr_in server_address;
         server_address.sin_family = AF_INET;
-        server_address.sin_port = htons(serverPortNumber);
-        server_address.sin_addr.s_addr = addr.s_addr;
+        server_address.sin_port = serverPortNumber;
+        server_address.sin_addr = addr.sin_addr;
 
         if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
             close(sd_stream);
@@ -382,6 +389,8 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
  * return gameId if success, otherwise return -1
  */
 int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
+    printf("RECONNECTING\n");
+    
     // send
     uint8_t bufferSend[BUFFER_SIZE];
     bufferSend[0] = VERSION;
@@ -401,22 +410,25 @@ int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
         }
     }
 
-    printf("reconnect\n");
     sendBuffer(connected_sd, bufferSend);
 
     // receive
     int recvResult = recvBuffer(connected_sd);
     if (recvResult == 0) {
-        close(connected_sd);
-        return 0;
+        return -1;
     }
+
+    printf("RECEIVE reconnect: %d status: %d statusModifier: %d "
+               "gameType: %d gameId: %d sequenceNum: %d\n",
+               bufferRecv[1], bufferRecv[2], bufferRecv[3],
+               bufferRecv[4], bufferRecv[5], bufferRecv[6]);
 
     // Server responds with the game number in addition to their move,
     // or with a reconnect error if they became full.
     int recvMoveResult = receiveMoveClient(connected_sd, 0, board);
     if (recvMoveResult == LOOP_BREAK) {
         close(connected_sd);
-        return 0;
+        return -1;
     }
     return bufferRecv[5];
 }
@@ -445,10 +457,8 @@ int connectToServer() {
             perror("connect error");
             continue;
         }
-
         return sd_stream;
     }
-
     return -1;
 }
 
@@ -509,11 +519,12 @@ void playClient(
         if (sd_stream < 0) {
             sd_stream = connectToServer();
             if (sd_stream < 0) {
-                close(sd_stream);
-                exit(1);
+                return;
             }
         }
-        reconnect(sd_stream, board);
+        if (reconnect(sd_stream, board) < 0) {
+            return;
+        }
     }
 
     uint8_t gameId = (uint8_t) buildGame;
@@ -523,19 +534,21 @@ void playClient(
         int recvResult = recvBuffer(connected_sd);
         if (recvResult == 0) {
             close(connected_sd);
-            int sd_stream = multicast(sd_dgram, multicast_address);
-            if (sd_stream < 0) {
-                sd_stream = connectToServer();
-                if (sd_stream < 0) {
-                    close(sd_stream);
-                    exit(1);
+            connected_sd = multicast(sd_dgram, multicast_address);
+            if (connected_sd < 0) {
+                connected_sd = connectToServer();
+                if (connected_sd < 0) {
+                    return;
                 }
             }
-            reconnect(sd_stream, board);
-            sequenceNum = 2;
+            gameId = reconnect(connected_sd, board);
+            if (gameId < 0) {
+                return;
+            }
+            sequenceNum = 0;
             continue;
         }
         int processResult = processBufferClient(connected_sd, gameId, &sequenceNum, board);
-        if (processResult == LOOP_BREAK) break;
+        if (processResult == LOOP_BREAK) return;
     }
 }
