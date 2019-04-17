@@ -92,7 +92,6 @@ void receiveReconnect(
         }
     }
 
-
     printBoard(boards[gameId], SERVER_MARK);
     int result = checkWin(boards[gameId], CLIENT_MARK);
     if (result == GAME_ON) {
@@ -355,6 +354,11 @@ void processMulticast(int sd_dgram, long portNumber) {
 
     int cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
 
+    printf("RECEIVE choice: %d status: %d statusModifier: %d "
+           "gameType: %d gameId: %d sequenceNum: %d\n",
+           bufferRecv[1], bufferRecv[2], bufferRecv[3],
+           bufferRecv[4], bufferRecv[5], bufferRecv[6]);
+
     if (cnt < BUFFER_SIZE) {
         printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
         perror("Fail to read: ");
@@ -379,7 +383,8 @@ void processMulticast(int sd_dgram, long portNumber) {
 
     printf("SEND choice: %d status: %d statusModifier: %d "
            "gameType: %d gameId: %d sequenceNum: %d\n",
-           bufferSend[1], bufferSend[2], bufferSend[3], bufferSend[4], bufferSend[5], bufferSend[6]);
+           bufferSend[1], bufferSend[2], bufferSend[3],
+           bufferSend[4], bufferSend[5], bufferSend[6]);
 
     if (cnt < 0) {
         perror("sendto in processMulticast");
