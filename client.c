@@ -279,7 +279,7 @@ int buildGameForClient(int connected_sd, char board[ROWS][COLUMNS]) {
  *
  * multicast_address: address of the multicast group
  *
- * return the sd_stream of a newly connected stream socket
+ * return the sd_stream of a newly connected stream socket, return -1 if failed
  */
 int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     // send
@@ -296,50 +296,76 @@ int multicast(int sd_dgram, struct sockaddr_in *multicast_address) {
     }
 
     // receive
-    socklen_t addrLen;
-    struct in_addr addr;
-    cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
-    if (cnt < BUFFER_SIZE) {
-        printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
-        perror("Fail to read: ");
-        // todo retry?
+    fd_set socketFDS;
+    int maxSD = sd_dgram;
+    struct timeval timeout;
+
+    FD_ZERO(&socketFDS);
+    FD_SET(sd_dgram, &socketFDS);
+
+    timeout.tv_sec = TIME_LIMIT_SERVER;
+    timeout.tv_usec = 0;
+
+    // block until something arrives
+    int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);
+
+    if (selectResult < 0) {
+        perror("Failed to select: ");
+        // todo
+        return -1;
+    }
+    if (selectResult == 0) {
+        printf("No message in the past %d seconds.\n", TIME_LIMIT_SERVER);
+        // todo
+        return -1;
     }
 
-    // check version
-    if (bufferRecv[0] != VERSION) {
-        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
-        // todo retry?
+    if (FD_ISSET(sd_dgram, &socketFDS)) {
+        socklen_t addrLen;
+        struct in_addr addr;
+        cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
+        if (cnt < BUFFER_SIZE) {
+            printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+            perror("Fail to read: ");
+            // todo retry?
+        }
+
+        // check version
+        if (bufferRecv[0] != VERSION) {
+            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
+            // todo retry?
+        }
+
+        // check command
+        if (bufferRecv[1] != 2) {
+            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 2);
+            // todo retry?
+        }
+
+        // get port number
+        uint8_t port_array[2] = {bufferRecv[2], bufferRecv[3]};
+        uint16_t serverPortNumber = u8_to_u16(port_array);
+
+        // connect
+        // start stream socket
+        int sd_stream = socket(AF_INET, SOCK_STREAM, 0);
+        if(sd_stream < 0) {
+            perror("Opening stream socket error");
+            return -1;
+        }
+
+        struct sockaddr_in server_address;
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(serverPortNumber);
+        server_address.sin_addr.s_addr = addr.s_addr;
+
+        if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
+            close(sd_stream);
+            perror("connect error");
+        }
+        return sd_stream;
     }
-
-    // check command
-    if (bufferRecv[1] != 2) {
-        printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 2);
-        // todo retry?
-    }
-
-    // get port number
-    uint8_t port_array[2] = {bufferRecv[2], bufferRecv[3]};
-    uint16_t serverPortNumber = u8_to_u16(port_array);
-
-    // connect
-    // start stream socket
-    int sd_stream = socket(AF_INET, SOCK_STREAM, 0);
-    if(sd_stream < 0) {
-        perror("Opening stream socket error");
-        exit(1);
-    }
-
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(serverPortNumber);
-    server_address.sin_addr.s_addr = addr.s_addr;
-
-    if (connect(sd_stream, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
-        close(sd_stream);
-        perror("connect error");
-    }
-
-    return sd_stream;
+    return -1;
 }
 
 
@@ -382,7 +408,6 @@ int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
         close(connected_sd);
         return 0;
     }
-
     return 1;
 }
 

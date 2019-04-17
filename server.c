@@ -343,7 +343,7 @@ void playServer(
         timeout.tv_usec = 0;
 
         // block until something arrives
-        int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);      
+        int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);
 
         if (selectResult < 0) {
             perror("Failed to select: ");
