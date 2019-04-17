@@ -79,7 +79,7 @@ void printBoard(char board[ROWS][COLUMNS], char mark);
 void playServer(
         int sd_stream,
         int sd_dgram,
-        struct sockaddr_in multicast_address);
+        long portNumber);
 
 void playClient(
         int connected_sd,
