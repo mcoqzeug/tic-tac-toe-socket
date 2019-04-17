@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    playServer(sd_stream, sd_dgram, multicast_address);
+    playServer(sd_stream, sd_dgram, portNumber);
 
     close(sd_stream);
     close(sd_dgram);

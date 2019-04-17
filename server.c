@@ -71,8 +71,56 @@ void receiveNewGame(
     sendBuffer(boardInfo[gameId].sd, sb);
 }
 
-void receiveReconnect() {
+void receiveReconnect(
+        int gameId,
+        int sendSequenceNum,
+        const uint8_t buffer[BUFFER_SIZE],
+        char boards[MAX_BOARD][ROWS][COLUMNS]) {
 
+    initBoard(boards[gameId]);
+    int boardIdx = 7;
+
+    for (int i=0; i<ROWS; i++) {
+        for (int j=0; j<COLUMNS; j++) {
+            if (buffer[boardIdx] == 2) {
+                boards[gameId][i][j] = SERVER_MARK;
+            }
+            else if (buffer[boardIdx] == 1) {
+                boards[gameId][i][j] = CLIENT_MARK;
+            }
+            boardIdx++;
+        }
+    }
+
+
+    printBoard(boards[gameId], SERVER_MARK);
+    int result = checkWin(boards[gameId], CLIENT_MARK);
+    if (result == GAME_ON) {
+        time(&boardInfo[gameId].latest_time);
+        uint8_t newChoice = serverMakeChoice(boards[gameId]);
+        sendMoveWithChoice(
+                boardInfo[gameId].sd, newChoice, gameId,
+                (uint8_t) sendSequenceNum, boards[gameId], SERVER_MARK);
+        return;
+    }
+
+    uint8_t sm;
+    if (result == WIN) {
+        printf("You lose.\n");
+        sm = LOSE;
+    } else {
+        printf("Draw.\n");
+        sm = DRAW;
+    }
+    uint8_t sb[BUFFER_SIZE] = {
+            VERSION, 0, GAME_COMPLETE, sm, END_GAME, gameId,
+            (uint8_t) sendSequenceNum};
+    sendBuffer(boardInfo[gameId].sd, sb);
+
+    printf("Clean board %d after game completed.\n", gameId);
+    close(boardInfo[gameId].sd);
+    initBoard(boards[gameId]);
+    initBoardInfo(&boardInfo[gameId]);
 }
 
 
@@ -204,6 +252,12 @@ void processBuffer(
         receiveNewGame(recvSequenceNum, sendSequenceNum, nextRecvSequenceNum, gameId);
         return;
     }
+
+    if (gameType == RECONNECT) {
+        receiveReconnect(gameId, sendSequenceNum, buffer, boards);
+        return;
+    }
+
     // Below are the cases when gameType == END_GAME, MOVE
     // need to check gameId, port & ip, and seqNum
     if (gameId != buffer[5]) {
@@ -257,6 +311,7 @@ void processBuffer(
         initBoardInfo(&boardInfo[gameId]);
         return;
     }
+
     // when gameType == MOVE
     receiveMove(sendSequenceNum, buffer, boards);
 }
@@ -288,8 +343,47 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
 }
 
 
-void processMulticast (int sd_dgram) {
+void processMulticast (int sd_dgram, long portnumber) {
 
+    uint8_t bufferSend[BUFFER_SIZE];
+    uint8_t bufferRecv[BUFFER_SIZE];
+
+    bufferSend[0] = VERSION;
+    bufferSend[1] = 2;
+
+    struct in_addr addr;
+    socklen_t addrLen = sizeof(&addr);
+
+    int cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
+
+    if (cnt < BUFFER_SIZE) {
+            printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+            perror("Fail to read: ");
+    }
+
+        // check version
+    if (bufferRecv[0] != VERSION) {
+            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
+    }
+
+        // check command
+    if (bufferRecv[1] != 1) {
+            printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 1);
+    }
+
+    uint8_t port_array[2];
+    u16_to_u8(htons(portnumber), port_array);
+    bufferSend[2] = port_array[0];
+    bufferSend[3] = port_array[1];
+
+    cnt = sendto(sd_dgram, bufferSend, sizeof(bufferSend), 0, (struct sockaddr *) &addr, sizeof(addr));
+
+    if (cnt < 0) {
+        perror("sendto");
+        close(sd_dgram);
+        // todo retry?
+    }
+    return;
 }
 
 /*
@@ -306,7 +400,7 @@ void processMulticast (int sd_dgram) {
 void playServer(
         int sd_stream,
         int sd_dgram,
-        struct sockaddr_in multicast_address) {
+        long portnumber) {
 
     char boards[MAX_BOARD][ROWS][COLUMNS];
 
@@ -355,7 +449,7 @@ void playServer(
         }
 
         if (FD_ISSET(sd_dgram, &socketFDS)) {
-            processMulticast(sd_dgram);
+            processMulticast(sd_dgram, portnumber);
         }
         
         // establish new connection
