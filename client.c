@@ -293,6 +293,7 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
     printf("MULTICASTING\n");
     // send
     uint8_t bufferSend[BUFFER_SIZE];
+    memset(bufferSend, 0, sizeof(bufferSend));
     bufferSend[0] = VERSION;
     bufferSend[1] = 1;
 
@@ -324,7 +325,7 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
     int selectResult = select(maxSD+1, &socketFDS, NULL, NULL, &timeout);
 
     if (selectResult < 0) {
-        perror("Failed to select: ");
+        perror("Failed to select");
         return -1;
     }
     if (selectResult == 0) {
@@ -337,7 +338,7 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
         socklen_t addrLen = sizeof(addr);
         cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
         if (cnt < 0) {
-            perror("Fail to read: ");
+            perror("Fail to read");
             return -1;
         } else if (cnt < BUFFER_SIZE) {
             printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
