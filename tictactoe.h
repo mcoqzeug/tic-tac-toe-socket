@@ -20,7 +20,7 @@
 
 #define ROWS  3
 #define COLUMNS  3
-#define MAX_BOARD 1
+#define MAX_BOARD 3
 #define MAX_TRY 3
 
 #define CLIENT_MARK 'X'
