@@ -48,9 +48,11 @@ int recvBuffer(int sd) {
     if (rc == 0) {
         printf("Server is disconnected.\n");
         return 0;
+    } else if (rc < 0) {
+        perror("Fail to read: ");
+        return 0;
     } else if (rc < BUFFER_SIZE) {
         printf("Received only %d bytes. (should have received %d bytes)\n", rc, BUFFER_SIZE);
-        perror("Fail to read: ");
         return 0;
     }
     return 1;
@@ -334,9 +336,11 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
         struct sockaddr_in addr;
         socklen_t addrLen = sizeof(addr);
         cnt = recvfrom(sd_dgram, bufferRecv, sizeof(bufferRecv), 0, (struct sockaddr *) &addr, &addrLen);
-        if (cnt < BUFFER_SIZE) {
-            printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+        if (cnt < 0) {
             perror("Fail to read: ");
+            return -1;
+        } else if (cnt < BUFFER_SIZE) {
+            printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
             return -1;
         }
 

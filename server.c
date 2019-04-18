@@ -363,23 +363,23 @@ void processMulticast(int sd_dgram, long portNumber) {
            bufferRecv[1], bufferRecv[2], bufferRecv[3],
            bufferRecv[4], bufferRecv[5], bufferRecv[6]);
 
-    if (cnt < BUFFER_SIZE) {
-        printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
+    if (cnt < 0) {
         perror("Fail to read: ");
+    } else if (cnt < BUFFER_SIZE) {
+        printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
     }
 
-        // check version
+    // check version
     if (bufferRecv[0] != VERSION) {
         printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[0], VERSION);
     }
 
-        // check command
+    // check command
     if (bufferRecv[1] != 1) {
         printf("Received invalid version number: %d, expected: %d.\n", bufferRecv[1], 1);
     }
 
     uint8_t port_array[2];
-    printf("port number long: %ld\n", portNumber);
     u16_to_u8(htons(portNumber), port_array);
     bufferSend[2] = port_array[0];
     bufferSend[3] = port_array[1];
@@ -394,7 +394,6 @@ void processMulticast(int sd_dgram, long portNumber) {
     if (cnt < 0) {
         perror("sendto in processMulticast");
         close(sd_dgram);
-        // todo retry?
     }
 }
 
@@ -473,7 +472,7 @@ void playServer(
         }
         
         // establish new connection
-        if (FD_ISSET(sd_stream, &socketFDS)) {  // todo why?
+        if (FD_ISSET(sd_stream, &socketFDS)) {
             uint8_t gameId;
             struct sockaddr_in from_address;
             socklen_t fromLength;
@@ -505,9 +504,13 @@ void playServer(
                     initBoardInfo(&boardInfo[i]);
                     initBoard(boards[i]);
                     continue;
-                } else if (rc < BUFFER_SIZE) {
-                    printf("Received only %d bytes. (should have received %d bytes)\n", rc, BUFFER_SIZE);
+                }
+                if (rc < 0) {
                     perror("Fail to read: ");
+                    continue;
+                }
+                if (rc < BUFFER_SIZE) {
+                    printf("Received only %d bytes. (should have received %d bytes)\n", rc, BUFFER_SIZE);
                     continue;
                 }
                 processBuffer((uint8_t) i, buffer, boards);
