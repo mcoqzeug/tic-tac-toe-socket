@@ -390,9 +390,10 @@ int multicast(int sd_dgram, struct sockaddr_in multicast_address) {
  */
 int reconnect(int connected_sd, char board[ROWS][COLUMNS]) {
     printf("RECONNECTING\n");
-    
+
     // send
     uint8_t bufferSend[BUFFER_SIZE];
+    memset(bufferSend, 0, sizeof(bufferSend));
     bufferSend[0] = VERSION;
     bufferSend[4] = RECONNECT;
 

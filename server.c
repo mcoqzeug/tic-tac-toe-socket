@@ -77,6 +77,8 @@ void receiveReconnect(
         const uint8_t buffer[BUFFER_SIZE],
         char boards[MAX_BOARD][ROWS][COLUMNS]) {
 
+    printf("RECONNECT\n");
+
     initBoard(boards[gameId]);
     int boardIdx = 7;
 
@@ -343,6 +345,8 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
 
 
 void processMulticast(int sd_dgram, long portNumber) {
+    printf("MULTICAST\n");
+
     uint8_t bufferSend[BUFFER_SIZE];
     uint8_t bufferRecv[BUFFER_SIZE];
 
