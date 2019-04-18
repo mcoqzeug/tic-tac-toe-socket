@@ -184,7 +184,7 @@ int processBufferClient(
     // Below are the cases when gameType == END_GAME, MOVE
     // need to check gameId and seqNum
     if (gameId != bufferRecv[5]) {
-        printf("Received invalid game id: %d.\n", gameId);
+        printf("Received invalid game id: %d expected: %d.\n", bufferRecv[5], gameId);
         respondToInvalidRequest(connected_sd, sendSequenceNum, gameId);
         return LOOP_BREAK;
     }
@@ -528,7 +528,8 @@ void playClient(
                 return;
             }
         }
-        if (reconnect(connected_sd, board) < 0) {
+        buildGame = reconnect(connected_sd, board);
+        if (buildGame < 0) {
             return;
         }
     }
