@@ -324,9 +324,9 @@ void checkBoardTimeOut(char boards[MAX_BOARD][ROWS][COLUMNS]) {
             && time(NULL) - boardInfo[i].latest_time >= TIME_LIMIT_SERVER) {
             // this board is unavailable and has waited for too long
             if (boardInfo[i].resendCount < MAX_SEND_COUNT) {  // the server can still resend
-                printf("RESEND when board[%d] timeout.\n", i);
+                printf("Board[%d] timeout.\n", i);
                 boardInfo[i].resendCount++;
-                sendBuffer(boardInfo[i].sd, boardInfo[i].bufferSend);
+                // sendBuffer(boardInfo[i].sd, boardInfo[i].bufferSend);
             } else {  // the server can't resend any more
                 // tell the client its game has ended due to time out
                 uint8_t sb[BUFFER_SIZE] = {
