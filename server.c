@@ -365,7 +365,6 @@ void processMulticast(int sd_dgram, long portNumber) {
 
     int found = 0;
     for (int i = 0; i < MAX_BOARD; i++) {
-        printf("boardInfo[%d].sd: %d", i, boardInfo[i].sd);
         if (boardInfo[i].sd == 0) {
             found = 1;
             break;
