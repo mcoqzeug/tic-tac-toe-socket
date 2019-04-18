@@ -363,8 +363,22 @@ void processMulticast(int sd_dgram, long portNumber) {
            bufferRecv[1], bufferRecv[2], bufferRecv[3],
            bufferRecv[4], bufferRecv[5], bufferRecv[6]);
 
+    int found = 0;
+    for (int i = 0; i < MAX_BOARD; i++) {
+        printf("boardInfo[%d].sd: %d", i, boardInfo[i].sd);
+        if (boardInfo[i].sd == 0) {
+            found = 1;
+            break;
+        }
+    }
+
+    if (found == 0) {
+        printf("There's no empty board for a multicast.\n");
+        return;
+    }
+
     if (cnt < 0) {
-        perror("Fail to read: ");
+        perror("Fail to read");
     } else if (cnt < BUFFER_SIZE) {
         printf("Received only %d bytes. (should have received %d bytes)\n", cnt, BUFFER_SIZE);
     }
@@ -464,11 +478,7 @@ void playServer(
         }
 
         if (FD_ISSET(sd_dgram, &socketFDS)) {
-            for (int i = 0; i < MAX_BOARD; i++) {
-                if (boardInfo[i].sd == 0) {
-                    processMulticast(sd_dgram, portNumber);
-                }
-            }
+            processMulticast(sd_dgram, portNumber);
         }
         
         // establish new connection
