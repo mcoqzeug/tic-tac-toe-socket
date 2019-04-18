@@ -519,8 +519,10 @@ void playClient(
     char board[ROWS][COLUMNS];
     initBoard(board);
 
-    int buildGame = buildGameForClient(connected_sd, board);
-    if (buildGame < 0) {
+    uint8_t gameId, sequenceNum;
+
+    gameId = buildGameForClient(connected_sd, board);
+    if (gameId < 0) {
         connected_sd = multicast(sd_dgram, multicast_address);
         if (connected_sd < 0) {
             connected_sd = connectToServer();
@@ -528,14 +530,14 @@ void playClient(
                 return;
             }
         }
-        buildGame = reconnect(connected_sd, board);
-        if (buildGame < 0) {
+        gameId = reconnect(connected_sd, board);
+        if (gameId < 0) {
             return;
         }
+        sequenceNum = 0;
+    } else {
+        sequenceNum = 2;
     }
-
-    uint8_t gameId = (uint8_t) buildGame;
-    uint8_t sequenceNum = 2;
 
     for (;;) {
         int recvResult = recvBuffer(connected_sd);
