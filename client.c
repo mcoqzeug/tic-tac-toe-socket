@@ -49,7 +49,7 @@ int recvBuffer(int sd) {
         printf("Server is disconnected.\n");
         return 0;
     } else if (rc < 0) {
-        perror("Fail to read: ");
+        perror("Fail to read");
         return 0;
     } else if (rc < BUFFER_SIZE) {
         printf("Received only %d bytes. (should have received %d bytes)\n", rc, BUFFER_SIZE);
@@ -520,14 +520,14 @@ void playClient(
 
     int buildGame = buildGameForClient(connected_sd, board);
     if (buildGame < 0) {
-        int sd_stream = multicast(sd_dgram, multicast_address);
-        if (sd_stream < 0) {
-            sd_stream = connectToServer();
-            if (sd_stream < 0) {
+        connected_sd = multicast(sd_dgram, multicast_address);
+        if (connected_sd < 0) {
+            connected_sd = connectToServer();
+            if (connected_sd < 0) {
                 return;
             }
         }
-        if (reconnect(sd_stream, board) < 0) {
+        if (reconnect(connected_sd, board) < 0) {
             return;
         }
     }
